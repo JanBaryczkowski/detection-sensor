@@ -3,6 +3,7 @@
 1.1 Operating Principle
 
 The proximity sensor project is based on the HC-SR04 ultrasonic module, which measures distances up to 2 meters. The system’s primary goal is to detect objects and signal their presence via LEDs and an audible buzzer.
+
 1.2 Detailed Operation
 
 The HC-SR04 emits an ultrasonic pulse and measures the time taken for the reflected sound wave to return. Based on this time, the distance to the object is calculated. If an object is within 0–10 cm, the system activates:
