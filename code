@@ -1,0 +1,140 @@
+#include <avr/io.h> 
+#include <util/delay.h>
+
+#define LED1 PB5 
+#define LED2 PB4 
+#define LED3 PB3 
+#define LED4 PB2 
+#define LED5 PB1 
+#define ECHO PD7
+#define TRIG PD6
+#define BUZZ PD5
+
+uint16_t duration;
+uint16_t distance;
+
+    // funkcja do ustawiania częstotliwości buzzeru
+void setBuzzFrequency(uint16_t frequency) {
+    if (frequency == 0) { // wyłączenie buzzera, gdy częstotliwość = 0 - funkcja mutebuzz
+        TCCR0A &= ~(1 << COM0B1);  
+    } else {
+        uint16_t top = F_CPU / (256 * frequency) - 1;  // oblicza górny limit dla timera
+        OCR0B = top;  
+        TCCR0A |= (1 << COM0B1);  // włączenie pwm
+    }
+}
+    // funkcja do wyłączenia buzzeru 
+void muteBuzz() {
+    PORTB &= ~((1 << LED1) | (1 << LED2) | (1 << LED3) | (1 << LED4) | (1 << LED5));
+    setBuzzFrequency(0);
+}
+
+    // funkcja dla odległosci ponizej 2cm ktora zalacza 5 diod i kolejne coraz mniej buzzer gra z inną częstotliwością
+uint16_t poziom1() {
+    PORTB |= (1 << LED5) | (1 << LED4) | (1 << LED3) | (1 << LED2) | (1 << LED1); 
+    setBuzzFrequency(1000);  
+}
+
+uint16_t poziom2() {
+    PORTB |= (1 << LED4) | (1 << LED3) | (1 << LED2) | (1 << LED1); 
+    PORTB &= ~(1 << LED5);
+    setBuzzFrequency(1500);  
+}   
+
+uint16_t poziom3() {
+    PORTB |= (1 << LED3) | (1 << LED2) | (1 << LED1); 
+    PORTB &= ~(1 << LED5); 
+    PORTB &= ~(1 << LED4);
+    setBuzzFrequency(2000);  
+}   
+
+uint16_t poziom4() {
+    PORTB |= (1 << LED2) | (1 << LED1); 
+    PORTB &= ~(1 << LED5); 
+    PORTB &= ~(1 << LED4);
+    PORTB &= ~(1 << LED3); 
+    setBuzzFrequency(2500);  
+}  
+
+uint16_t poziom5() {
+    PORTB |= (1 << LED1); 
+    PORTB &= ~(1 << LED5); 
+    PORTB &= ~(1 << LED4);
+    PORTB &= ~(1 << LED3);
+    PORTB &= ~(1 << LED2); 
+    setBuzzFrequency(3000);  
+}   
+
+    // funckja odpowiadająca, za działanie czujnika ultrasonic - czeka aż pin ECHO przejdzie na stan wysoki
+    // a następnie mierzy, jak długo ten stan trwa Jeśli czas przekroczy dopuszczalny limit, zwraca 0, wskazując na timeout.
+uint16_t readPulseHigh() { 
+    uint16_t count = 0;
+
+    while (!(PIND & (1 << ECHO))) {  
+        _delay_us(1);  
+        if (count++ > 60000) return 0; // Timeout
+    }
+
+    count = 0;
+
+    // Mierz czas trwania HIGH na pinie ECHO
+    while (PIND & (1 << ECHO)) { 
+        _delay_us(1);  
+        count++;  
+        if (count > 60000) return 0; // Timeout
+    }
+
+    return count; // Zwróć zmierzony czas
+}
+
+    // funkcja główna
+int main(void) {
+
+    // diody jako wyjście
+    DDRB |= (1 << LED1) | (1 << LED2) | (1 << LED3) | (1 << LED4) | (1 << LED5);
+
+    // wyłączenie diod na starcie
+    PORTB &= ~((1 << LED1) | (1 << LED2) | (1 << LED3) | (1 << LED4) | (1 << LED5));
+    
+    // złączenie czujnika: echo jako wejście, trig jako wyjście
+    DDRD &= ~(1 << ECHO);
+    DDRD |= (1 << TRIG);
+
+    // buzzer jako wyjście
+    DDRD |= (1 << BUZZ);  
+
+    // Konfiguracja Timer 0 w trybie Fast PWM
+    TCCR0A |= (1 << WGM00) | (1 << WGM01);  // tryb Fast PWM
+    TCCR0B |= (1 << CS02);                  // preskaler 256
+    TCCR0A |= (1 << COM0B1);                // włączenie PWM na OC0B (PD5)
+    while (1) {
+        PORTD &= ~(1 << TRIG);              // resetowanie trig
+        _delay_ms(2);
+        PORTD |= (1 << TRIG);               // ustawia trig na stan wysoki przez 10 ms
+        _delay_ms(10); 
+        PORTD &= ~(1 << TRIG);              // znowu na 0
+
+        duration = readPulseHigh();
+        distance = duration * 0.034 / 2;    // konwertowanie odległości na cm
+
+
+        // Sprawdzanie odległości i ustawienie odpowiednich LED oraz buzzera
+        if (distance <= 2) {
+            poziom1();
+        } else if (distance <= 4) {
+            poziom2();
+        } else if (distance <= 6) {
+            poziom3();
+        } else if (distance <= 8) {
+            poziom4();
+        } else if (distance <= 10) {
+            poziom5();
+        } else {
+            muteBuzz();
+        }
+        
+        _delay_ms(100); 
+    }
+
+    return 0;
+}
